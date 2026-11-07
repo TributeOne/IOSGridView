@@ -59,15 +59,24 @@ jobs:
       - name: Build
         run: |
           echo "TWEAK_VERSION=$(grep '^Version:' control | cut -d ' ' -f2)" >> $GITHUB_ENV
-          make clean package DEBUG=0 FINALPACKAGE=1
-          make clean package DEBUG=0 FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless
-          make clean package DEBUG=0 FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=roothide
+          # Rootful and rootless packages share the same file name (iphoneos-arm64),
+          # so each scheme's package is renamed before the next build overwrites it.
+          mkdir -p out
+          for scheme in rootful rootless roothide; do
+            if [ "$scheme" = rootful ]; then
+              make clean package DEBUG=0 FINALPACKAGE=1
+            else
+              make clean package DEBUG=0 FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=$scheme
+            fi
+            for f in packages/*.deb; do mv "$f" "out/$(basename "${f%.deb}")-$scheme.deb"; done
+          done
+          ls -l out
 
       - name: Upload the tweak .deb(s)
         uses: actions/upload-artifact@v7
         with:
           name: IOSGridView v${{ env.TWEAK_VERSION }}
-          path: packages/*.deb
+          path: out/*.deb
           if-no-files-found: error
 
       - name: Create a draft release
@@ -76,5 +85,5 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
-          files: packages/*.deb
+          files: out/*.deb
           draft: true
