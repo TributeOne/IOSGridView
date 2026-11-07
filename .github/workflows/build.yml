@@ -1,0 +1,80 @@
+name: Build IOSGridView
+
+on:
+  push:
+    branches: [ "main" ]
+    tags: [ "v*" ]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build IOSGridView
+    runs-on: macos-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install dependencies
+        run: brew install make ldid
+
+      - name: Set PATH environment variables
+        run: |
+          echo "$(brew --prefix make)/libexec/gnubin" >> $GITHUB_PATH
+          echo "THEOS=${{ github.workspace }}/theos" >> $GITHUB_ENV
+
+      - name: Get Theos commit
+        run: |
+          echo "THEOS_COMMIT=$(git ls-remote https://github.com/roothide/theos HEAD | awk '{print substr($1,1,7)}')" >> $GITHUB_ENV
+
+      - name: Cache Theos
+        id: cache-theos
+        uses: actions/cache@v6
+        with:
+          path: theos
+          key: IOSGridView-26.5-SDK-${{ env.THEOS_COMMIT }}
+
+      - name: Setup Theos
+        if: ${{ steps.cache-theos.outputs.cache-hit != 'true' }}
+        run: |
+          git clone --quiet --depth=1 --recurse-submodules https://github.com/roothide/theos.git
+          git clone --quiet --depth=1 -n --filter=tree:0 https://github.com/Tonwalter888/iOS-SDKs.git
+          cd iOS-SDKs
+          git sparse-checkout set --no-cone iPhoneOS26.5.sdk
+          git checkout --quiet
+          mv *.sdk "$THEOS/sdks"
+
+      - name: Clone YouTubeHeader
+        run: |
+          rm -rf "$THEOS/include/YouTubeHeader"
+          git clone --quiet --depth=1 https://github.com/PoomSmart/YouTubeHeader.git "$THEOS/include/YouTubeHeader"
+
+      - name: Build
+        run: |
+          echo "TWEAK_VERSION=$(grep '^Version:' control | cut -d ' ' -f2)" >> $GITHUB_ENV
+          make clean package DEBUG=0 FINALPACKAGE=1
+          make clean package DEBUG=0 FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless
+          make clean package DEBUG=0 FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=roothide
+
+      - name: Upload the tweak .deb(s)
+        uses: actions/upload-artifact@v7
+        with:
+          name: IOSGridView v${{ env.TWEAK_VERSION }}
+          path: packages/*.deb
+          if-no-files-found: error
+
+      - name: Create a draft release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          files: packages/*.deb
+          draft: true

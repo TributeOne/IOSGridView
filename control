@@ -1,0 +1,10 @@
+Package: de.victorien.iosgridview
+Name: IOSGridView
+Version: 1.0.0
+Architecture: iphoneos-arm64
+Description: Brings the iPad grid layout of the YouTube home feed to the iPhone: two videos per row with compact tiles.
+Maintainer: Victorien
+Author: Victorien
+Section: Tweaks
+Depends: mobilesubstrate, firmware (>= 14.0)
+Homepage: https://github.com/TributeOne/IOSGridView
